@@ -1,1 +1,5 @@
 .env
+rag/vector_store/
+rag/embeddings_cache.pkl
+rag/data_hash.txt
+rag/ecommerce_data.json

@@ -1,11 +1,13 @@
 import os
 import json
 import random
+import pickle
 from datetime import datetime, timedelta
 from dotenv import load_dotenv
 from django.shortcuts import render
 from django.http import HttpResponse
 from typing import List
+import hashlib
 
 # LangChain imports
 from langchain_community.embeddings import HuggingFaceEmbeddings
@@ -19,6 +21,87 @@ from langchain.schema import Document
 # Load environment variables
 load_dotenv()
 os.environ["DEEPSEEK_API_KEY"] = os.getenv("DEEPSEEK_API_KEY")
+
+# Constants for file paths
+VECTOR_STORE_PATH = 'rag/vector_store'
+EMBEDDINGS_CACHE_PATH = 'rag/embeddings_cache.pkl'
+DATA_HASH_PATH = 'rag/data_hash.txt'
+
+def get_data_hash():
+    """Generate a hash of the data file to detect changes"""
+    try:
+        if os.path.exists('rag/ecommerce_data.json'):
+            with open('rag/ecommerce_data.json', 'rb') as f:
+                content = f.read()
+                return hashlib.md5(content).hexdigest()
+    except:
+        pass
+    return None
+
+def save_data_hash(hash_value):
+    """Save the current data hash"""
+    try:
+        with open(DATA_HASH_PATH, 'w') as f:
+            f.write(hash_value)
+    except:
+        pass
+
+def load_data_hash():
+    """Load the saved data hash"""
+    try:
+        if os.path.exists(DATA_HASH_PATH):
+            with open(DATA_HASH_PATH, 'r') as f:
+                return f.read().strip()
+    except:
+        pass
+    return None
+
+def data_has_changed():
+    """Check if the data has changed since last vector store creation"""
+    current_hash = get_data_hash()
+    saved_hash = load_data_hash()
+    return current_hash != saved_hash
+
+def save_vector_store(vector_store, embeddings):
+    """Save vector store and embeddings to disk"""
+    try:
+        # Create directory if it doesn't exist
+        os.makedirs(VECTOR_STORE_PATH, exist_ok=True)
+        
+        # Save vector store
+        vector_store.save_local(VECTOR_STORE_PATH)
+        
+        # Save embeddings cache
+        with open(EMBEDDINGS_CACHE_PATH, 'wb') as f:
+            pickle.dump(embeddings, f)
+        
+        # Save data hash
+        save_data_hash(get_data_hash())
+        
+        print("Vector store and embeddings saved successfully")
+        return True
+    except Exception as e:
+        print(f"Error saving vector store: {e}")
+        return False
+
+def load_vector_store():
+    """Load vector store and embeddings from disk"""
+    try:
+        if not os.path.exists(VECTOR_STORE_PATH) or not os.path.exists(EMBEDDINGS_CACHE_PATH):
+            return None, None
+        
+        # Load embeddings
+        with open(EMBEDDINGS_CACHE_PATH, 'rb') as f:
+            embeddings = pickle.load(f)
+        
+        # Load vector store
+        vector_store = FAISS.load_local(VECTOR_STORE_PATH, embeddings)
+        
+        print("Vector store and embeddings loaded successfully from disk")
+        return vector_store, embeddings
+    except Exception as e:
+        print(f"Error loading vector store: {e}")
+        return None, None
 
 def generate_sample_ecommerce_data():
     """Generate 1000 sample ecommerce products and save to JSON"""
@@ -264,20 +347,32 @@ def load_ecommerce_data_from_json():
         return []
 
 def setup_rag_chain():
-    """Set up RAG system with JSON data"""
+    """Set up RAG system with persistent storage"""
     try:
-        # Load documents from JSON
-        docs = load_ecommerce_data_from_json()
+        # Check if we can load existing vector store
+        vector_store, embeddings = load_vector_store()
         
-        if not docs:
-            print("No documents loaded from JSON file")
-            return None
-        
-        print(f"Setting up RAG with {len(docs)} documents")
-        
-        # Create embeddings and vector store
-        embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
-        vector_store = FAISS.from_documents(docs, embeddings)
+        # If no existing store or data has changed, create new one
+        if vector_store is None or data_has_changed():
+            print("Creating new vector store...")
+            
+            # Load documents from JSON
+            docs = load_ecommerce_data_from_json()
+            
+            if not docs:
+                print("No documents loaded from JSON file")
+                return None
+            
+            print(f"Setting up RAG with {len(docs)} documents")
+            
+            # Create embeddings and vector store
+            embeddings = HuggingFaceEmbeddings(model_name="sentence-transformers/all-MiniLM-L6-v2")
+            vector_store = FAISS.from_documents(docs, embeddings)
+            
+            # Save for future use
+            save_vector_store(vector_store, embeddings)
+        else:
+            print("Using existing vector store from disk")
         
         # Set up the DeepSeek model
         llm = ChatDeepSeek(model="deepseek-chat", temperature=0.1)
@@ -317,11 +412,22 @@ def setup_rag_chain():
 
 # Global variable to store the RAG chain
 rag_chain = None
+_initialization_lock = False
 
 def initialize_rag():
-    """Initialize RAG chain"""
-    global rag_chain
-    rag_chain = setup_rag_chain()
+    """Initialize RAG chain with lazy loading"""
+    global rag_chain, _initialization_lock
+    
+    if _initialization_lock:
+        return rag_chain is not None
+    
+    if rag_chain is None:
+        _initialization_lock = True
+        try:
+            rag_chain = setup_rag_chain()
+        finally:
+            _initialization_lock = False
+    
     return rag_chain is not None
 
 def refresh_rag_data():
@@ -330,6 +436,16 @@ def refresh_rag_data():
     try:
         # Generate new data
         generate_sample_ecommerce_data()
+        
+        # Clear existing vector store
+        if os.path.exists(VECTOR_STORE_PATH):
+            import shutil
+            shutil.rmtree(VECTOR_STORE_PATH)
+        if os.path.exists(EMBEDDINGS_CACHE_PATH):
+            os.remove(EMBEDDINGS_CACHE_PATH)
+        if os.path.exists(DATA_HASH_PATH):
+            os.remove(DATA_HASH_PATH)
+        
         # Reinitialize RAG chain
         rag_chain = setup_rag_chain()
         return rag_chain is not None
@@ -338,13 +454,13 @@ def refresh_rag_data():
         return False
 
 def rag_view(request):
-    """Main view for RAG application"""
+    """Main view for RAG application with lazy initialization"""
     global rag_chain
     
     response = None
     error = None
     
-    # Initialize RAG chain if not already done
+    # Initialize RAG chain if not already done (lazy loading)
     if rag_chain is None:
         if not initialize_rag():
             error = "Failed to initialize the RAG system. Please check the logs."
@@ -379,7 +495,8 @@ def rag_view(request):
                     'total_products': data.get('total_products', 0),
                     'total_reviews': data.get('total_reviews', 0),
                     'total_orders': data.get('total_orders', 0),
-                    'generated_at': data.get('generated_at', 'Unknown')[:19].replace('T', ' ')
+                    'generated_at': data.get('generated_at', 'Unknown')[:19].replace('T', ' '),
+                    'vector_store_status': '✅ Loaded from disk' if os.path.exists(VECTOR_STORE_PATH) else '🔄 Created in memory'
                 }
     except:
         pass
