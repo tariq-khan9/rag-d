@@ -1,0 +1,415 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Ecommerce RAG Assistant</title>
+    <style>
+      * {
+        margin: 0;
+        padding: 0;
+        box-sizing: border-box;
+      }
+
+      body {
+        font-family: "Segoe UI", Tahoma, Geneva, Verdana, sans-serif;
+        background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+        min-height: 100vh;
+        padding: 20px;
+      }
+
+      .container {
+        max-width: 1000px;
+        margin: 0 auto;
+        background: rgba(255, 255, 255, 0.95);
+        border-radius: 20px;
+        box-shadow: 0 20px 40px rgba(0, 0, 0, 0.1);
+        overflow: hidden;
+      }
+
+      .header {
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        color: white;
+        padding: 30px;
+        text-align: center;
+      }
+
+      .header h1 {
+        font-size: 2.5rem;
+        margin-bottom: 10px;
+        text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
+      }
+
+      .header p {
+        font-size: 1.1rem;
+        opacity: 0.9;
+      }
+
+      .stats-bar {
+        background: #f8f9fa;
+        padding: 15px 30px;
+        border-bottom: 1px solid #e9ecef;
+        display: flex;
+        justify-content: space-around;
+        flex-wrap: wrap;
+      }
+
+      .stat-item {
+        text-align: center;
+        margin: 5px;
+      }
+
+      .stat-number {
+        font-size: 1.5rem;
+        font-weight: bold;
+        color: #667eea;
+      }
+
+      .stat-label {
+        font-size: 0.9rem;
+        color: #666;
+      }
+
+      .main-content {
+        padding: 30px;
+      }
+
+      .search-section {
+        margin-bottom: 30px;
+      }
+
+      .search-form {
+        display: flex;
+        gap: 10px;
+        margin-bottom: 15px;
+        flex-wrap: wrap;
+      }
+
+      .search-input {
+        flex: 1;
+        min-width: 300px;
+        padding: 15px 20px;
+        border: 2px solid #e9ecef;
+        border-radius: 50px;
+        font-size: 1rem;
+        outline: none;
+        transition: all 0.3s ease;
+      }
+
+      .search-input:focus {
+        border-color: #667eea;
+        box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+      }
+
+      .btn {
+        padding: 15px 25px;
+        border: none;
+        border-radius: 50px;
+        cursor: pointer;
+        font-size: 1rem;
+        font-weight: 600;
+        transition: all 0.3s ease;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+      }
+
+      .btn-primary {
+        background: linear-gradient(45deg, #667eea, #764ba2);
+        color: white;
+        box-shadow: 0 4px 15px rgba(102, 126, 234, 0.3);
+      }
+
+      .btn-primary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(102, 126, 234, 0.4);
+      }
+
+      .btn-secondary {
+        background: linear-gradient(45deg, #48bb78, #38b2ac);
+        color: white;
+        box-shadow: 0 4px 15px rgba(72, 187, 120, 0.3);
+      }
+
+      .btn-secondary:hover {
+        transform: translateY(-2px);
+        box-shadow: 0 6px 20px rgba(72, 187, 120, 0.4);
+      }
+
+      .example-queries {
+        margin-top: 15px;
+      }
+
+      .example-queries h4 {
+        color: #333;
+        margin-bottom: 10px;
+        font-size: 1rem;
+      }
+
+      .query-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 8px;
+      }
+
+      .query-tag {
+        background: #e3f2fd;
+        color: #1976d2;
+        padding: 5px 12px;
+        border-radius: 20px;
+        font-size: 0.85rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        border: 1px solid transparent;
+      }
+
+      .query-tag:hover {
+        background: #1976d2;
+        color: white;
+        transform: translateY(-1px);
+      }
+
+      .response-section {
+        margin-top: 30px;
+      }
+
+      .response-box {
+        background: #f8f9fa;
+        border-radius: 15px;
+        padding: 25px;
+        border-left: 5px solid #667eea;
+        box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+      }
+
+      .response-content {
+        font-size: 1.1rem;
+        line-height: 1.6;
+        color: #333;
+        white-space: pre-wrap;
+      }
+
+      .error-box {
+        background: #fff5f5;
+        border: 1px solid #fed7d7;
+        border-radius: 15px;
+        padding: 20px;
+        color: #c53030;
+        border-left: 5px solid #e53e3e;
+      }
+
+      .loading {
+        display: none;
+        text-align: center;
+        padding: 20px;
+      }
+
+      .spinner {
+        border: 3px solid #f3f3f3;
+        border-top: 3px solid #667eea;
+        border-radius: 50%;
+        width: 30px;
+        height: 30px;
+        animation: spin 1s linear infinite;
+        margin: 0 auto 10px;
+      }
+
+      @keyframes spin {
+        0% {
+          transform: rotate(0deg);
+        }
+        100% {
+          transform: rotate(360deg);
+        }
+      }
+
+      .footer {
+        background: #f8f9fa;
+        padding: 20px 30px;
+        text-align: center;
+        color: #666;
+        border-top: 1px solid #e9ecef;
+        margin-top: 30px;
+      }
+
+      @media (max-width: 768px) {
+        .search-form {
+          flex-direction: column;
+        }
+
+        .search-input {
+          min-width: 100%;
+        }
+
+        .stats-bar {
+          flex-direction: column;
+          text-align: center;
+        }
+
+        .header h1 {
+          font-size: 2rem;
+        }
+
+        .main-content {
+          padding: 20px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div class="container">
+      <div class="header">
+        <h1>🛍️ Ecommerce RAG Assistant</h1>
+        <p>Ask me anything about our products, reviews, and orders!</p>
+      </div>
+
+      {% if stats %}
+      <div class="stats-bar">
+        <div class="stat-item">
+          <div class="stat-number">{{ stats.total_products }}</div>
+          <div class="stat-label">Products</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number">{{ stats.total_reviews }}</div>
+          <div class="stat-label">Reviews</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number">{{ stats.total_orders }}</div>
+          <div class="stat-label">Orders</div>
+        </div>
+        <div class="stat-item">
+          <div class="stat-number">{{ stats.generated_at }}</div>
+          <div class="stat-label">Last Updated</div>
+        </div>
+      </div>
+      {% endif %}
+
+      <div class="main-content">
+        <div class="search-section">
+          <form method="post" class="search-form" id="searchForm">
+            {% csrf_token %}
+            <input
+              type="text"
+              name="query"
+              class="search-input"
+              placeholder="Ask me about products, prices, reviews, categories..."
+              id="queryInput"
+            />
+            <button
+              type="submit"
+              name="action"
+              value="query"
+              class="btn btn-primary"
+            >
+              🔍 Search
+            </button>
+            <button
+              type="submit"
+              name="action"
+              value="refresh"
+              class="btn btn-secondary"
+            >
+              🔄 Refresh Data
+            </button>
+          </form>
+
+          <div class="example-queries">
+            <h4>💡 Try these example queries:</h4>
+            <div class="query-tags">
+              <span
+                class="query-tag"
+                onclick="setQuery('Show me the best rated laptops under $500')"
+                >Best laptops under $500</span
+              >
+              <span
+                class="query-tag"
+                onclick="setQuery('What are the top electronics products?')"
+                >Top electronics</span
+              >
+              <span
+                class="query-tag"
+                onclick="setQuery('Find products with 5 star ratings')"
+                >5-star products</span
+              >
+              <span
+                class="query-tag"
+                onclick="setQuery('Show me recent customer reviews')"
+                >Recent reviews</span
+              >
+              <span
+                class="query-tag"
+                onclick="setQuery('Which brands are most popular?')"
+                >Popular brands</span
+              >
+              <span
+                class="query-tag"
+                onclick="setQuery('What products are trending this month?')"
+                >Trending products</span
+              >
+              <span
+                class="query-tag"
+                onclick="setQuery('Show me products in clothing category')"
+                >Clothing items</span
+              >
+              <span
+                class="query-tag"
+                onclick="setQuery('What are the cheapest products available?')"
+                >Budget options</span
+              >
+            </div>
+          </div>
+        </div>
+
+        <div class="loading" id="loadingDiv">
+          <div class="spinner"></div>
+          <p>Processing your query...</p>
+        </div>
+
+        {% if response %}
+        <div class="response-section">
+          <h3 style="color: #667eea; margin-bottom: 15px">
+            🤖 Assistant Response:
+          </h3>
+          <div class="response-box">
+            <div class="response-content">{{ response|safe }}</div>
+          </div>
+        </div>
+        {% endif %} {% if error %}
+        <div class="response-section">
+          <h3 style="color: #e53e3e; margin-bottom: 15px">❌ Error:</h3>
+          <div class="error-box">{{ error }}</div>
+        </div>
+        {% endif %}
+      </div>
+
+      <div class="footer">
+        <p>
+          Powered by LangChain, DeepSeek, and Django | RAG System with 1000+
+          Sample Products
+        </p>
+      </div>
+    </div>
+
+    <script>
+      function setQuery(query) {
+        document.getElementById("queryInput").value = query;
+      }
+
+      document
+        .getElementById("searchForm")
+        .addEventListener("submit", function () {
+          document.getElementById("loadingDiv").style.display = "block";
+        });
+
+      // Auto-focus on the search input
+      document.getElementById("queryInput").focus();
+
+      // Handle enter key in search input
+      document
+        .getElementById("queryInput")
+        .addEventListener("keypress", function (e) {
+          if (e.key === "Enter") {
+            document.getElementById("searchForm").submit();
+          }
+        });
+    </script>
+  </body>
+</html>

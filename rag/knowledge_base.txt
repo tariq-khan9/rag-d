@@ -1,0 +1,5 @@
+Django is a high-level Python web framework that encourages rapid development and clean, pragmatic design. Built by experienced developers, it takes care of much of the hassle of web development, so you can focus on writing your app without needing to reinvent the wheel.
+
+Django's philosophy is "Don't repeat yourself" (DRY). It has a clear separation between the model (data), the view (logic), and the template (UI).
+
+LangChain is a framework for developing applications powered by language models. It enables applications that are context-aware and can reason. LangChain provides tools to connect LLMs to other sources of data.
